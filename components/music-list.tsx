@@ -1,9 +1,26 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useRef } from "react"
-import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Play, Pause, Clock, Trash2, AlertCircle, Volume2, VolumeX, Loader2, SkipBack, SkipForward, Maximize2, Minimize2, Loader, X, Music } from "lucide-react"
+import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import {
+  Play,
+  Pause,
+  Clock,
+  Trash2,
+  AlertCircle,
+  Volume2,
+  VolumeX,
+  Loader2,
+  SkipBack,
+  SkipForward,
+  Maximize2,
+  Minimize2,
+  Loader,
+  X,
+  Music,
+  Shuffle,
+} from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,11 +30,12 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import { toast, Toaster } from "sonner"
-import { Slider } from "@/components/ui/slider"
-import { usePlayerStore } from "@/lib/CurrentUserSong"
-
+} from "@/components/ui/alert-dialog";
+import { toast, Toaster } from "sonner";
+import { Slider } from "@/components/ui/slider";
+import { usePlayerStore } from "@/lib/CurrentUserSong";
+import { Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
 // Interface for the song data structure from API
 interface Song {
   title: string;
@@ -31,24 +49,27 @@ interface Song {
 }
 
 export function MusicList() {
-  const router = useRouter()
-  const [musicData, setMusicData] = useState<Song[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [isDeleting, setIsDeleting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [currentSong, setCurrentSong] = useState<string | null>(null)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [songToDelete, setSongToDelete] = useState<string | null>(null)
-  const [isMuted, setIsMuted] = useState(false)
-  const [volume, setVolume] = useState(1)
-  const [currentTime, setCurrentTime] = useState(0)
-  const [duration, setDuration] = useState(0)
-  const [isLoadingSong, setIsLoadingSong] = useState(false)
-  const [audioSrc, setAudioSrc] = useState<string | null>(null)
+  const router = useRouter();
+  const [musicData, setMusicData] = useState<Song[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [currentSong, setCurrentSong] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [songToDelete, setSongToDelete] = useState<string | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isLoadingSong, setIsLoadingSong] = useState(false);
+  const [audioSrc, setAudioSrc] = useState<string | null>(null);
   // Add a state to control the player popup visibility
-  const [showPlayerPopup, setShowPlayerPopup] = useState(false)
+  const [showPlayerPopup, setShowPlayerPopup] = useState(false);
   // Add state for expanded/minimized player view
-  const [isPlayerExpanded, setIsPlayerExpanded] = useState(false)
+  const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
+  const [isShuffleEnabled, setIsShuffleEnabled] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -57,14 +78,14 @@ export function MusicList() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef(null);
 
-  const { setCurrentUserSong } = usePlayerStore()
-  
+  const { setCurrentUserSong } = usePlayerStore();
+
   // Audio element reference
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-  
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   const getAuthToken = () => {
-    return localStorage.getItem('token') || '';
-  }
+    return localStorage.getItem("token") || "";
+  };
 
   // Fetch music data from API
   const fetchMusicData = async () => {
@@ -84,142 +105,249 @@ export function MusicList() {
       if (!csrfToken) {
         throw new Error("Authentication required");
       }
-      
-      setIsLoading(true)
-      const response = await fetch('http://localhost:8085/api/music/songs', {
+
+      setIsLoading(true);
+      const response = await fetch("http://localhost:8085/api/music/songs", {
         method: "GET",
         headers: {
-          "Authorization": `Bearer ${getAuthToken()}`,
+          Authorization: `Bearer ${getAuthToken()}`,
           "X-CSRF-TOKEN": csrfToken,
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
-        credentials: "include"
+        credentials: "include",
       });
-      
+
       if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`)
+        throw new Error(`HTTP error! Status: ${response.status}`);
       }
-      
-      const data = await response.json()
-      
+
+      const data = await response.json();
+
       // Process song data and ensure each item has a unique ID
       const songsWithIds = data.map((song: Song, index: number) => ({
         ...song,
         // Convert contendType to contentType if needed
         contentType: song.contentType || song.contendType,
         // If the song doesn't have an ID, use the index as a fallback
-        id: song.id || `song-${index}`, 
+        id: song.id || `song-${index}`,
         // Format duration from seconds to MM:SS if available
-        formattedDuration: song.durationSec ? formatDuration(song.durationSec) : "Unknown"
-      }))
-      
-      setMusicData(songsWithIds)
-      setError(null)
+        formattedDuration: song.durationSec
+          ? formatDuration(song.durationSec)
+          : "Unknown",
+      }));
+
+      setMusicData(songsWithIds);
+      setError(null);
     } catch (err) {
-      console.error("Error fetching music data:", err)
-      setError("Failed to load your music. Please try again later.")
+      console.error("Error fetching music data:", err);
+      setError("Failed to load your music. Please try again later.");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
-    fetchMusicData()
-  }, [router])
+    fetchMusicData();
+  }, [router]);
 
+  const handleSearch = (e) => {
+    setSearchQuery(e.target.value);
+  };
+  
+  // Add a function to filter music based on search query
+  const filteredMusicData = searchQuery
+    ? musicData.filter((song) => 
+        song.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        getFilenameFromPath(song.s3Key).toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : musicData;
+  
+  // Add a function to play a random song from the library
+  const playRandomSongFromLibrary = () => {
+    if (musicData.length === 0) return;
+    
+    const randomIndex = Math.floor(Math.random() * musicData.length);
+    const randomSong = musicData[randomIndex];
+    
+    if (randomSong && randomSong.id) {
+      setCurrentSong(randomSong.id);
+      setIsPlaying(true);
+      setShowPlayerPopup(true);
+      
+      // Set shuffle mode to true for continuous random play
+      setIsShuffleEnabled(true);
+      
+      toast.success("Playing random songs from your library");
+    }
+  };
   // Set up audio event listeners only once
+  const playRandomSong = () => {
+    if (!musicData.length) return;
+    let availableSongs = musicData.filter((song) => song.id !== currentSong);
+
+    if (availableSongs.length === 0) {
+      availableSongs = musicData;
+    }
+
+    const randomIndex = Math.floor(Math.random() * availableSongs.length);
+    const randomSong = availableSongs[randomIndex];
+    if (randomSong && randomSong.id) {
+      // Just update the current song ID, don't call play directly
+      setCurrentSong(randomSong.id);
+      // Keep isPlaying true to ensure autoplay works
+      setIsPlaying(true);
+    }
+  };
   useEffect(() => {
     if (!audioRef.current) return;
-    
+
     const audio = audioRef.current;
-    
+
     const handleTimeUpdate = () => {
       setCurrentTime(audio.currentTime);
     };
-    
+
     const handleDurationChange = () => {
       setDuration(audio.duration);
     };
-    
+
     const handleEnded = () => {
-      setIsPlaying(false);
-      setCurrentTime(0);
+      // Before playing the next song, set a flag to avoid interruption
+      const isPlayingNextSong = true;
+      let nextSongId = null;
+      if (isShuffleEnabled) {
+        playRandomSong();
+      } else {
+        // For sequential playback
+        if (!currentSong || musicData.length === 0) return;
+
+        const currentIndex = musicData.findIndex(
+          (song) => song.id === currentSong
+        );
+        if (currentIndex === -1) return;
+
+        const nextIndex = (currentIndex + 1) % musicData.length;
+        const nextSong = musicData[nextIndex];
+
+        if (nextSong && nextSong.id) {
+          // Just update the current song ID, don't call play directly
+          setCurrentSong(nextSong.id);
+          // Keep isPlaying true to ensure autoplay works
+          setIsPlaying(true);
+        }
+        if (nextSongId) {
+          setCurrentSong(nextSongId);
+          setIsPlaying(true);
+        }
+      }
     };
-    
+
     const handleVolumeChange = () => {
       setIsMuted(audio.muted);
       setVolume(audio.volume);
     };
-    
+
     const handleLoadedData = () => {
-      console.log("Audio data loaded");
+      console.log("Audio data loaded, isPlaying:", isPlaying);
       setIsLoadingSong(false);
-      // Only auto-play if we intended to play
+
+      // Only try to play if we're supposed to be playing
       if (isPlaying) {
-        const playPromise = audio.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(error => {
-            console.error("Playback failed after load:", error);
-            setIsPlaying(false);
-          });
-        }
+        // Use a small timeout to ensure the browser is ready
+        // This helps avoid play/pause race conditions
+        setTimeout(() => {
+          console.log("Attempting to play after timeout");
+          if (audioRef.current && isPlaying) {
+            const playPromise = audioRef.current.play();
+            if (playPromise !== undefined) {
+              playPromise.catch((error) => {
+                console.error("Playback failed after load:", error);
+                setIsPlaying(false);
+                toast.error(
+                  "Playback Error: Unable to play this song. Please try again."
+                );
+              });
+            }
+          }
+        }, 50);
       }
     };
-    
+
     const handleError = (e: Event) => {
       // Use a more resilient error handling approach
-      const errorEvent = e as ErrorEvent; 
-      console.error("Audio error occurred:", errorEvent.message || "Unknown error");
+      const errorEvent = e as ErrorEvent;
+      console.error(
+        "Audio error occurred:",
+        errorEvent.message || "Unknown error"
+      );
       setIsLoadingSong(false);
       setIsPlaying(false);
-      toast({
-        title: "Playback Error",
-        description: "Unable to play this song. Please try again.",
-        variant: "destructive"
-      });
+      toast.error("Playback Error Unable to play this song. Please try again.");
     };
-    
+
     // Add event listeners
-    audio.addEventListener('timeupdate', handleTimeUpdate);
-    audio.addEventListener('durationchange', handleDurationChange);
-    audio.addEventListener('ended', handleEnded);
-    audio.addEventListener('volumechange', handleVolumeChange);
-    audio.addEventListener('loadeddata', handleLoadedData);
-    audio.addEventListener('error', handleError);
-    
+    audio.addEventListener("timeupdate", handleTimeUpdate);
+    audio.addEventListener("durationchange", handleDurationChange);
+    audio.addEventListener("ended", handleEnded);
+    audio.addEventListener("volumechange", handleVolumeChange);
+    audio.addEventListener("loadeddata", handleLoadedData);
+    audio.addEventListener("error", handleError);
+
     // Remove event listeners on cleanup
     return () => {
-      audio.removeEventListener('timeupdate', handleTimeUpdate);
-      audio.removeEventListener('durationchange', handleDurationChange);
-      audio.removeEventListener('ended', handleEnded);
-      audio.removeEventListener('volumechange', handleVolumeChange);
-      audio.removeEventListener('loadeddata', handleLoadedData);
-      audio.removeEventListener('error', handleError);
+      audio.removeEventListener("timeupdate", handleTimeUpdate);
+      audio.removeEventListener("durationchange", handleDurationChange);
+      audio.removeEventListener("ended", handleEnded);
+      audio.removeEventListener("volumechange", handleVolumeChange);
+      audio.removeEventListener("loadeddata", handleLoadedData);
+      audio.removeEventListener("error", handleError);
     };
-  }, [isPlaying]); // Re-attach if isPlaying changes
+  }, [isPlaying, isShuffleEnabled]); // Re-attach if isPlaying changes
 
   // Play/pause toggling effect
   useEffect(() => {
     if (!audioRef.current || !audioSrc) return;
-    
+
+    console.log("Setting new audio source:", audioSrc);
+
+    // Stop any current playback first
+    audioRef.current.pause();
+
+    // Set new source
+    audioRef.current.src = audioSrc;
+
+    // Force loading of new media
+    audioRef.current.load();
+
+    // Audio will be played by the loadeddata event handler
+    // We don't call play() here to avoid race conditions
+  }, [audioSrc]);
+
+  useEffect(() => {
+    if (!audioRef.current || !audioSrc) return;
+
+    console.log("isPlaying changed to:", isPlaying);
+
     if (isPlaying) {
-      // Only attempt to play if we have a source and audio is ready
-      if (audioRef.current.readyState >= 2) { // HAVE_CURRENT_DATA or higher
+      // Only attempt to play if audio is ready
+      if (audioRef.current.readyState >= 2) {
+        // HAVE_CURRENT_DATA or higher
+        console.log("Audio ready, attempting to play");
         const playPromise = audioRef.current.play();
+
         if (playPromise !== undefined) {
-          playPromise.catch(error => {
+          playPromise.catch((error) => {
             console.error("Playback failed:", error);
             setIsPlaying(false);
-            toast({
-              title: "Playback Error",
-              description: "Unable to play this song. Please try again.",
-              variant: "destructive"
-            });
+            toast.error("Unable to play this song. Please try again.");
           });
         }
+      } else {
+        console.log("Audio not ready yet, waiting for loadeddata event");
+        // We'll rely on the loadeddata event to start playback
       }
     } else {
-      // Always safe to pause
+      console.log("Pausing audio");
       audioRef.current.pause();
     }
   }, [isPlaying, audioSrc]);
@@ -231,197 +359,224 @@ export function MusicList() {
       setShowPlayerPopup(false); // Hide player when no song is selected
       return;
     }
-    
+
     // Show player popup when a song is selected
     setShowPlayerPopup(true);
-    
+
     const prepareSongForPlayback = async () => {
       try {
         setIsLoadingSong(true);
-        
+
         const token = getAuthToken();
         if (!token) {
-          router.push('/login');
+          router.push("/login");
           return;
         }
-        
+
         // Get CSRF token
-        const csrfResponse = await fetch("http://localhost:8085/api/user/csrf", {
-          credentials: "include",
-        });
+        const csrfResponse = await fetch(
+          "http://localhost:8085/api/user/csrf",
+          {
+            credentials: "include",
+          }
+        );
         const csrfData = await csrfResponse.json();
         const csrfToken = csrfData.token;
-        
+
         if (!csrfToken) {
           throw new Error("Authentication required");
         }
-        
+
         // Create audio source URL
-        const respone =  fetch(`http://localhost:8085/api/music/stream/${currentSong}`, {
-          method: "GET",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "X-CSRF-TOKEN": csrfToken,
-            "byteRange": "bytes=0-",
+        const respone = fetch(
+          `http://localhost:8085/api/music/stream/${currentSong}`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "X-CSRF-TOKEN": csrfToken,
+              byteRange: "bytes=0-",
+            },
           }
-        });
+        );
         const blob = (await respone).blob();
         const src = URL.createObjectURL(await blob);
+
+        if (audioSrc) {
+          URL.revokeObjectURL(audioSrc);
+        }
+
         setAudioSrc(src);
-        
         // Reset any previous errors
         setError(null);
       } catch (error) {
         console.error("Error preparing song:", error);
         setIsLoadingSong(false);
         setIsPlaying(false);
-        toast({
+        toast.success({
           title: "Error",
-          description: "Failed to prepare the song for playback. Please try again.",
-          variant: "destructive"
+          description:
+            "Failed to prepare the song for playback. Please try again.",
+          variant: "destructive",
         });
       }
     };
-    
+
     prepareSongForPlayback();
+    return () => {
+      if (audioSrc) {
+        URL.revokeObjectURL(audioSrc);
+      }
+    };
   }, [currentSong, router]);
-  
+
   // Apply audio source to the audio element when it changes
   useEffect(() => {
     if (!audioRef.current || !audioSrc) return;
-    
+
     // Stop any current playback first
     audioRef.current.pause();
-    
+
     // Set new source and load it
     audioRef.current.src = audioSrc;
     audioRef.current.load();
-    
+
     // Audio will play after loaded, via the loadeddata event
   }, [audioSrc]);
 
   // Helper function to format duration from seconds to MM:SS
   const formatDuration = (seconds: number): string => {
-    if (!seconds) return "Unknown"
-    const minutes = Math.floor(seconds / 60)
-    const remainingSeconds = Math.floor(seconds % 60)
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
-  }
-
+    if (!seconds) return "Unknown";
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.floor(seconds % 60);
+    return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
+  };
 
   // Format file size to a human-readable format
   const formatFileSize = (bytes: number): string => {
     if (!bytes) return "Unknown";
-    if (bytes < 1024) return bytes + ' bytes';
-    else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
-    else return (bytes / 1048576).toFixed(1) + ' MB';
-  }
+    if (bytes < 1024) return bytes + " bytes";
+    else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+    else return (bytes / 1048576).toFixed(1) + " MB";
+  };
   // Get filename from s3Key path
   const getFilenameFromPath = (path: string): string => {
-    const parts = path.split('/')
-    return parts[parts.length - 1].split('.')[0]
-  }
+    const parts = path.split("/");
+    return parts[parts.length - 1].split(".")[0];
+  };
 
   const handlePlayPause = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation() // Prevent navigation when clicking play/pause
-    
+    e.stopPropagation(); // Prevent navigation when clicking play/pause
+
     if (currentSong === id) {
       // If already selected, just toggle play state
-      setIsPlaying(!isPlaying)
+      setIsPlaying(!isPlaying);
     } else {
       // If selecting a new song, set it and prepare to play
-      setCurrentSong(id)
+      setCurrentSong(id);
       // We'll set isPlaying to true, but actual playback will happen after loading
-      setIsPlaying(true)
+      setIsPlaying(true);
     }
-  }
+  };
 
   const handleDeleteSong = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation() // Prevent navigation when clicking delete
-    setSongToDelete(id)
-  }
+    e.stopPropagation(); // Prevent navigation when clicking delete
+    setSongToDelete(id);
+  };
 
   const confirmDelete = async () => {
     if (songToDelete !== null) {
       try {
-        setIsDeleting(true)
-        
+        setIsDeleting(true);
+
         const token = getAuthToken();
         if (!token) {
-          router.push('/login');
+          router.push("/login");
           return;
         }
-        
+
         // Get CSRF token
-        const csrfResponse = await fetch("http://localhost:8085/api/user/csrf", {
-          credentials: "include",
-        });
+        const csrfResponse = await fetch(
+          "http://localhost:8085/api/user/csrf",
+          {
+            credentials: "include",
+          }
+        );
         const csrfData = await csrfResponse.json();
         const csrfToken = csrfData.token;
-        
+
         if (!csrfToken) {
           throw new Error("Authentication required");
         }
-        
+
         // Call the delete API endpoint
-        const response = await fetch(`http://localhost:8085/api/music/delete/${songToDelete}`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'X-CSRF-TOKEN': csrfToken,
-            'Content-Type': 'application/json'
-          },
-          credentials: "include"
-        })
-        
+        const response = await fetch(
+          `http://localhost:8085/api/music/delete/${songToDelete}`,
+          {
+            method: "DELETE",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "X-CSRF-TOKEN": csrfToken,
+              "Content-Type": "application/json",
+            },
+            credentials: "include",
+          }
+        );
+
         if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.message || `Error ${response.status}: Failed to delete song`)
+          const errorData = await response.json();
+          throw new Error(
+            errorData.message ||
+              `Error ${response.status}: Failed to delete song`
+          );
         }
-        
+
         // Remove the song from the list
-        setMusicData(musicData.filter((song) => song.id !== songToDelete))
+        setMusicData(musicData.filter((song) => song.id !== songToDelete));
 
         // If the current playing song is deleted, reset the player
         if (currentSong === songToDelete) {
-          setCurrentSong(null)
-          setIsPlaying(false)
-          setAudioSrc(null)
+          setCurrentSong(null);
+          setIsPlaying(false);
+          setAudioSrc(null);
         }
-        
+
         // Show success toast
         toast.success("The song has been removed from your library.");
       } catch (err) {
-        console.error("Error deleting song:", err)
+        console.error("Error deleting song:", err);
         toast({
           title: "Delete Failed",
-          description: err instanceof Error ? err.message : "Unable to delete song. Please try again.",
-          variant: "destructive"
-        })
+          description:
+            err instanceof Error
+              ? err.message
+              : "Unable to delete song. Please try again.",
+          variant: "destructive",
+        });
       } finally {
-        setIsDeleting(false)
-        setSongToDelete(null) // Reset the song to delete
+        setIsDeleting(false);
+        setSongToDelete(null); // Reset the song to delete
       }
     }
-  }
+  };
 
   const cancelDelete = () => {
-    setSongToDelete(null)
-  }
+    setSongToDelete(null);
+  };
 
   const toggleMute = () => {
     if (audioRef.current) {
-      audioRef.current.muted = !audioRef.current.muted
-      setIsMuted(!isMuted)
+      audioRef.current.muted = !audioRef.current.muted;
+      setIsMuted(!isMuted);
     }
-  }
+  };
 
   const handleVolumeChange = (newVolume: number[]) => {
     if (audioRef.current) {
       const volumeValue = newVolume[0];
       audioRef.current.volume = volumeValue;
       setVolume(volumeValue);
-      
+
       // If volume is set to 0, mute the audio
       if (volumeValue === 0) {
         audioRef.current.muted = true;
@@ -432,15 +587,15 @@ export function MusicList() {
         setIsMuted(false);
       }
     }
-  }
+  };
 
   const handleSeek = (newTime: number[]) => {
     if (audioRef.current) {
       audioRef.current.currentTime = newTime[0];
       setCurrentTime(newTime[0]);
     }
-  }
-  
+  };
+
   const handlePlay = (song: Song) => {
     setCurrentUserSong({
       id: song.id,
@@ -451,56 +606,73 @@ export function MusicList() {
 
   const playNextSong = () => {
     if (!currentSong || musicData.length === 0) return;
-    
-    const currentIndex = musicData.findIndex(song => song.id === currentSong);
-    if (currentIndex === -1) return;
-    
-    const nextIndex = (currentIndex + 1) % musicData.length;
-    const nextSong = musicData[nextIndex];
-    
-    if (nextSong && nextSong.id) {
-      setCurrentSong(nextSong.id);
-      setIsPlaying(true);
+    if (isShuffleEnabled) {
+      playRandomSong();
+    } else {
+      const currentIndex = musicData.findIndex(
+        (song) => song.id === currentSong
+      );
+      if (currentIndex === -1) return;
+
+      const nextIndex = (currentIndex + 1) % musicData.length;
+      const nextSong = musicData[nextIndex];
+
+      if (nextSong && nextSong.id) {
+        setCurrentSong(nextSong.id);
+        setIsPlaying(true);
+      }
     }
-  }
+  };
 
   const playPreviousSong = () => {
     if (!currentSong || musicData.length === 0) return;
-    
-    const currentIndex = musicData.findIndex(song => song.id === currentSong);
+
+    const currentIndex = musicData.findIndex((song) => song.id === currentSong);
     if (currentIndex === -1) return;
-    
+
     const prevIndex = (currentIndex - 1 + musicData.length) % musicData.length;
     const prevSong = musicData[prevIndex];
-    
+
     if (prevSong && prevSong.id) {
       setCurrentSong(prevSong.id);
       setIsPlaying(true);
     }
-  }
+  };
 
   // This function will be used for the "View Details" button
   // rather than clicking on the whole row
   const navigateToSongDetail = (song: Song, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent any other click handlers
     router.push(`/music/song/${song.id}`);
-  }
+  };
 
   // Function to close the player popup
   const closePlayer = () => {
-    setShowPlayerPopup(false);
-    setCurrentSong(null);
-    setIsPlaying(false);
+    // First pause the audio to prevent any playback attempts
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current.src = '';
+
+      // Remove the src attribute and load to properly release the audio resource
+      audioRef.current.removeAttribute("src");
+      audioRef.current.load();
     }
-  }
+
+    // Clean up any object URLs to prevent memory leaks
+    if (audioSrc) {
+      URL.revokeObjectURL(audioSrc);
+      setAudioSrc(null);
+    }
+
+    // Update state last, after audio resources are cleaned up
+    setShowPlayerPopup(false);
+    setIsPlaying(false);
+    setCurrentSong(null);
+  };
 
   // Toggle expanded/minimized player
   const togglePlayerSize = () => {
     setIsPlayerExpanded(!isPlayerExpanded);
-  }
+  };
 
   const openModal = () => setIsModalOpen(true);
   const closeModal = () => {
@@ -513,8 +685,8 @@ export function MusicList() {
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files.length > 0) {
-      const filesArray = Array.from(e.target.files).filter(file => 
-        file.type.startsWith('audio/')
+      const filesArray = Array.from(e.target.files).filter((file) =>
+        file.type.startsWith("audio/")
       );
       setSelectedFiles(filesArray);
     }
@@ -533,8 +705,8 @@ export function MusicList() {
     e.preventDefault();
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const filesArray = Array.from(e.dataTransfer.files).filter(file => 
-        file.type.startsWith('audio/')
+      const filesArray = Array.from(e.dataTransfer.files).filter((file) =>
+        file.type.startsWith("audio/")
       );
       setSelectedFiles(filesArray);
     }
@@ -550,28 +722,31 @@ export function MusicList() {
     if (selectedFiles.length > 0) {
       setIsLoading(true);
       setUploadProgress(0);
-      
+
       try {
         // Create a FormData instance
         const formData = new FormData();
-        
+
         // Append each file to the FormData
-        selectedFiles.forEach(file => {
-          formData.append('file', file);
+        selectedFiles.forEach((file) => {
+          formData.append("file", file);
         });
-        
+
         // Upload files using Fetch API with a custom implementation for progress tracking
         const uploadWithProgress = async () => {
           // AbortController for cancellation if needed
           const controller = new AbortController();
           const signal = controller.signal;
-          
+
           try {
             // This is a workaround for tracking upload progress with fetch
             // since fetch doesn't have built-in upload progress tracking
             let loaded = 0;
-            const total = selectedFiles.reduce((sum, file) => sum + file.size, 0);
-            
+            const total = selectedFiles.reduce(
+              (sum, file) => sum + file.size,
+              0
+            );
+
             // Create a counter to simulate progress
             // In production, consider using a service worker or a library that supports progress
             const progressInterval = setInterval(() => {
@@ -580,68 +755,76 @@ export function MusicList() {
               if (loaded < total * 0.9) {
                 loaded += total * 0.05 * Math.random();
                 if (loaded > total * 0.9) loaded = total * 0.9;
-                
+
                 const progress = Math.round((loaded / total) * 100);
                 setUploadProgress(progress);
               }
             }, 200);
-            const csrfResponse = await fetch("http://localhost:8085/api/user/csrf", {
-                   credentials: "include",
-            });
-             const csrfToken = (await csrfResponse.json()).token;
+            const csrfResponse = await fetch(
+              "http://localhost:8085/api/user/csrf",
+              {
+                credentials: "include",
+              }
+            );
+            const csrfToken = (await csrfResponse.json()).token;
             if (!csrfToken) {
-               throw new Error("Authentication required");
+              throw new Error("Authentication required");
             }
-            
+
             // Actual fetch request
-            const response = await fetch('http://localhost:8085/api/music/upload', {
-              method: 'POST',
-              headers: {
-                "Authorization": `Bearer ${getAuthToken()}`,
-                "X-CSRF-TOKEN": csrfToken,
-              },
-              body: formData,
-              signal
-            });
-            
+            const response = await fetch(
+              "http://localhost:8085/api/music/upload",
+              {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${getAuthToken()}`,
+                  "X-CSRF-TOKEN": csrfToken,
+                },
+                body: formData,
+                signal,
+              }
+            );
+
             // Clear the progress interval
             clearInterval(progressInterval);
-            
+
             // Set to nearly complete while server processes
             setUploadProgress(95);
-            
+
             if (!response.ok) {
-              throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+              throw new Error(
+                `Server responded with ${response.status}: ${response.statusText}`
+              );
             }
-            
+
             // Complete the progress
             setUploadProgress(100);
-            
+
             // Get the response data
             const result = await response.json();
             return result;
-            
           } catch (error) {
             if (signal.aborted) {
-              throw new Error('Upload was cancelled');
+              throw new Error("Upload was cancelled");
             }
             throw error;
           }
         };
-        
+
         // Execute the upload
         const result = await uploadWithProgress();
-        
+
         // Handle success
         setIsLoading(false);
         closeModal();
         fetchMusicData();
         setTimeout(() => {
-          toast.success(`${selectedFiles.length} music file(s) uploaded successfully!`);
-        }, 500); 
+          toast.success(
+            `${selectedFiles.length} music file(s) uploaded successfully!`
+          );
+        }, 500);
         // Here you would typically refresh your music list
         // refreshMusicList();
-        
       } catch (error) {
         setIsLoading(false);
         toast.error(`Upload error: ${error.message}`);
@@ -650,7 +833,9 @@ export function MusicList() {
   };
 
   // Get current song details
-  const currentSongDetails = currentSong ? musicData.find(song => song.id === currentSong) : null;
+  const currentSongDetails = currentSong
+    ? musicData.find((song) => song.id === currentSong)
+    : null;
 
   if (isLoading) {
     return (
@@ -665,29 +850,73 @@ export function MusicList() {
       <div className="p-4 text-center">
         <AlertCircle className="h-8 w-8 text-destructive mx-auto mb-2" />
         <p className="text-destructive font-medium">{error}</p>
-        <Button 
-          className="mt-4"
-          onClick={() => window.location.reload()}
-        >
+        <Button className="mt-4" onClick={() => window.location.reload()}>
           Try Again
         </Button>
       </div>
-    )
+    );
   }
 
   return (
     <div className="w-full">
       {/* Hidden audio element for playback */}
-      <audio 
-        ref={audioRef}
-        preload="auto"
-      />
+      <audio ref={audioRef} preload="auto" />
 
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold">Your Music</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold">Your Music</h2>
+          <div className="text-sm text-muted-foreground">
+            {musicData.length} songs
+          </div>
+        </div>
+
         <div className="flex items-center gap-3">
-          <Toaster position="top-right"/>
-          <div className="text-sm text-muted-foreground">{musicData.length} songs</div>
+          {showSearch ? (
+            <div className="relative w-64">
+              <Input
+                type="text"
+                placeholder="Search songs..."
+                value={searchQuery}
+                onChange={handleSearch}
+                className="pr-8"
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-0 top-0 h-full"
+                onClick={() => {
+                  setSearchQuery("");
+                  setShowSearch(false);
+                }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => setShowSearch(true)}
+            >
+              <Search className="h-4 w-4" />
+              Search
+            </Button>
+          )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={playRandomSongFromLibrary}
+            disabled={musicData.length === 0}
+          >
+            <Shuffle className="h-4 w-4" />
+            Random Play
+          </Button>
+
+          <Toaster position="top-right" />
+
           <Button size="sm" className="gap-2" onClick={openModal}>
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -713,8 +942,12 @@ export function MusicList() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6 relative">
             {/* Close Button */}
-            <button 
-              className={`absolute top-4 right-4 text-gray-500 ${isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:text-gray-700'}`}
+            <button
+              className={`absolute top-4 right-4 text-gray-500 ${
+                isLoading
+                  ? "opacity-50 cursor-not-allowed"
+                  : "hover:text-gray-700"
+              }`}
               onClick={closeModal}
               disabled={isLoading}
             >
@@ -724,10 +957,10 @@ export function MusicList() {
             <h2 className="text-xl font-bold mb-6">Upload Music</h2>
 
             {/* Drag & Drop Area */}
-            <div 
+            <div
               className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer ${
-                isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
-              } ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}
+                isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300"
+              } ${isLoading ? "opacity-50 pointer-events-none" : ""}`}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
@@ -737,10 +970,10 @@ export function MusicList() {
               <p className="text-lg font-medium text-gray-700 mb-2">
                 {selectedFiles.length > 0
                   ? `${selectedFiles.length} music file(s) selected`
-                  : 'Drag and drop your music files here'}
+                  : "Drag and drop your music files here"}
               </p>
               <p className="text-gray-500 mb-4">
-                {selectedFiles.length === 0 && 'or click to browse'}
+                {selectedFiles.length === 0 && "or click to browse"}
               </p>
               <p className="text-xs text-gray-400">
                 Supported formats: MP3, WAV, FLAC, AAC
@@ -763,16 +996,21 @@ export function MusicList() {
                 <div className="bg-gray-50 rounded-lg p-4 max-h-60 overflow-y-auto">
                   <ul className="space-y-3">
                     {selectedFiles.map((file, index) => (
-                      <li key={index} className="flex justify-between items-center bg-white p-3 rounded-md shadow-sm">
+                      <li
+                        key={index}
+                        className="flex justify-between items-center bg-white p-3 rounded-md shadow-sm"
+                      >
                         <div className="flex items-center">
                           <Music size={20} className="text-blue-500 mr-3" />
                           <div className="truncate max-w-xs">
                             <p className="font-medium">{file.name}</p>
-                            <p className="text-gray-500 text-sm">{formatFileSize(file.size)}</p>
+                            <p className="text-gray-500 text-sm">
+                              {formatFileSize(file.size)}
+                            </p>
                           </div>
                         </div>
                         {!isLoading && (
-                          <button 
+                          <button
                             onClick={() => removeFile(index)}
                             className="text-gray-400 hover:text-red-500"
                           >
@@ -794,8 +1032,8 @@ export function MusicList() {
                   <span>{uploadProgress}%</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2.5">
-                  <div 
-                    className="bg-blue-600 h-2.5 rounded-full" 
+                  <div
+                    className="bg-blue-600 h-2.5 rounded-full"
                     style={{ width: `${uploadProgress}%` }}
                   ></div>
                 </div>
@@ -804,8 +1042,8 @@ export function MusicList() {
 
             {/* Action Buttons */}
             <div className="mt-6 flex justify-end gap-3">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 disabled={isLoading}
                 onClick={closeModal}
               >
@@ -822,7 +1060,7 @@ export function MusicList() {
                     Uploading...
                   </>
                 ) : (
-                  'Upload Music'
+                  "Upload Music"
                 )}
               </Button>
             </div>
@@ -832,7 +1070,9 @@ export function MusicList() {
 
       {musicData.length === 0 ? (
         <div className="text-center py-12 border rounded-md bg-muted/10">
-          <p className="text-muted-foreground mb-2">You don't have any songs yet</p>
+          <p className="text-muted-foreground mb-2">
+            You don't have any songs yet
+          </p>
           <Button size="sm" className="gap-2" onClick={openModal}>
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -893,12 +1133,16 @@ export function MusicList() {
                       </Button>
                     ) : (
                       <div className="flex items-center">
-                        <span className="text-muted-foreground mr-2">{index + 1}</span>
+                        <span className="text-muted-foreground mr-2">
+                          {index + 1}
+                        </span>
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-6 w-6 rounded-full opacity-0 group-hover:opacity-100"
-                          onClick={(e) => song.id && handlePlayPause(song.id, e)}
+                          onClick={(e) =>
+                            song.id && handlePlayPause(song.id, e)
+                          }
                         >
                           <Play className="h-3 w-3" />
                         </Button>
@@ -909,20 +1153,11 @@ export function MusicList() {
                     {song.title || getFilenameFromPath(song.s3Key)}
                   </div>
                   <div className="col-span-1 text-right text-muted-foreground">
-                    {song.durationSec ? formatDuration(song.durationSec) : "--:--"}
+                    {song.durationSec
+                      ? formatDuration(song.durationSec)
+                      : "--:--"}
                   </div>
                   <div className="col-span-2 flex justify-end gap-2">
-                    {/* View Details Button */}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="opacity-0 group-hover:opacity-100 text-muted-foreground"
-                      onClick={(e) => song.id && navigateToSongDetail(song, e)}
-                    >
-                      View Details
-                    </Button>
-                    
-                    {/* Delete Button */}
                     <Button
                       variant="ghost"
                       size="icon"
@@ -941,10 +1176,16 @@ export function MusicList() {
 
       {/* Pop-up Player (shows only when a song is selected and showPlayerPopup is true) */}
       {showPlayerPopup && currentSong && (
-        <div className={`fixed ${isPlayerExpanded ? 'inset-x-0 bottom-0 top-20 m-4' : 'bottom-4 right-4'} transition-all duration-300 ease-in-out`}>
-          <div 
+        <div
+          className={`fixed ${
+            isPlayerExpanded
+              ? "inset-x-0 bottom-0 top-20 m-4"
+              : "bottom-4 right-4"
+          } transition-all duration-300 ease-in-out`}
+        >
+          <div
             className={`bg-background border rounded-lg shadow-lg overflow-hidden ${
-              isPlayerExpanded ? 'w-full h-full flex flex-col' : 'w-[32rem]'
+              isPlayerExpanded ? "w-full h-full flex flex-col" : "w-[32rem]"
             }`}
           >
             {/* Player header */}
@@ -959,7 +1200,11 @@ export function MusicList() {
                   className="h-8 w-8"
                   onClick={togglePlayerSize}
                 >
-                  {isPlayerExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                  {isPlayerExpanded ? (
+                    <Minimize2 className="h-4 w-4" />
+                  ) : (
+                    <Maximize2 className="h-4 w-4" />
+                  )}
                 </Button>
                 <Button
                   variant="ghost"
@@ -985,9 +1230,13 @@ export function MusicList() {
                 </Button>
               </div>
             </div>
-            
+
             {/* Player content */}
-            <div className={`p-4 ${isPlayerExpanded ? 'flex-1 flex flex-col' : ''}`}>
+            <div
+              className={`p-4 ${
+                isPlayerExpanded ? "flex-1 flex flex-col" : ""
+              }`}
+            >
               {/* Song info and album art placeholder - only in expanded view */}
               {isPlayerExpanded && (
                 <div className="flex-1 flex flex-col items-center justify-center mb-4">
@@ -1014,7 +1263,7 @@ export function MusicList() {
                   </div>
                 </div>
               )}
-              
+
               {/* Progress bar */}
               <div className="w-full mb-3">
                 <Slider
@@ -1029,22 +1278,36 @@ export function MusicList() {
                   <div>{formatDuration(duration)}</div>
                 </div>
               </div>
-              
+
+              {/* Playback controls */}
               {/* Playback controls */}
               <div className="flex items-center justify-center gap-2 mb-3">
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="h-8 w-8" 
+                {/* Shuffle button */}
+                <Button
+                  variant={isShuffleEnabled ? "default" : "ghost"}
+                  size="icon"
+                  className={`h-8 w-8 ${
+                    isShuffleEnabled ? "text-primary-foreground bg-primary" : ""
+                  }`}
+                  onClick={() => setIsShuffleEnabled(!isShuffleEnabled)}
+                  title="Shuffle"
+                >
+                  <Shuffle className="h-4 w-4" />
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
                   onClick={playPreviousSong}
                 >
                   <SkipBack className="h-4 w-4" />
                 </Button>
-                
-                <Button 
-                  variant="default" 
-                  size="icon" 
-                  className="h-10 w-10 rounded-full" 
+
+                <Button
+                  variant="default"
+                  size="icon"
+                  className="h-10 w-10 rounded-full"
                   onClick={() => setIsPlaying(!isPlaying)}
                   disabled={isLoadingSong}
                 >
@@ -1056,29 +1319,33 @@ export function MusicList() {
                     <Play className="h-5 w-5 ml-0.5" />
                   )}
                 </Button>
-                
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="h-8 w-8" 
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
                   onClick={playNextSong}
                 >
                   <SkipForward className="h-4 w-4" />
                 </Button>
               </div>
-              
-              {/* Volume control */}
+
+              {/* Volume control - reduced size in expanded view */}
               <div className="flex items-center gap-2">
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="h-8 w-8" 
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
                   onClick={toggleMute}
                 >
-                  {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                  {isMuted ? (
+                    <VolumeX className="h-4 w-4" />
+                  ) : (
+                    <Volume2 className="h-4 w-4" />
+                  )}
                 </Button>
-                
-                <div className="flex-1">
+
+                <div className={isPlayerExpanded ? "w-32" : "flex-1"}>
                   <Slider
                     value={[isMuted ? 0 : volume]}
                     max={1}
@@ -1092,7 +1359,10 @@ export function MusicList() {
         </div>
       )}
       {/* Confirmation Dialog for Delete */}
-      <AlertDialog open={songToDelete !== null} onOpenChange={(open) => !open && cancelDelete()}>
+      <AlertDialog
+        open={songToDelete !== null}
+        onOpenChange={(open) => !open && cancelDelete()}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
@@ -1100,7 +1370,8 @@ export function MusicList() {
               Remove Song
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to remove this song from your library? This action cannot be undone.
+              Are you sure you want to remove this song from your library? This
+              action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1123,5 +1394,5 @@ export function MusicList() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
-  )
+  );
 }
