@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Play, Pause, Clock, Trash2, AlertCircle, Volume2, VolumeX, Loader2, SkipBack, SkipForward, Maximize2, Minimize2 } from "lucide-react"
+import { Play, Pause, Clock, Trash2, AlertCircle, Volume2, VolumeX, Loader2, SkipBack, SkipForward, Maximize2, Minimize2, Loader, X, Music } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,7 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { toast } from "sonner"
+import { toast, Toaster } from "sonner"
 import { Slider } from "@/components/ui/slider"
 import { usePlayerStore } from "@/lib/CurrentUserSong"
 
@@ -50,6 +50,13 @@ export function MusicList() {
   // Add state for expanded/minimized player view
   const [isPlayerExpanded, setIsPlayerExpanded] = useState(false)
 
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isUploadLoading, setIsUploadLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const fileInputRef = useRef(null);
+
   const { setCurrentUserSong } = usePlayerStore()
   
   // Audio element reference
@@ -60,63 +67,63 @@ export function MusicList() {
   }
 
   // Fetch music data from API
-  useEffect(() => {
-    const fetchMusicData = async () => {
-      try {
-        const token = localStorage.getItem("token");
-        console.log("Token from localStorage:", token);
+  const fetchMusicData = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      console.log("Token from localStorage:", token);
 
-        if (!token) {
-          router.push("/login");
-          return;
-        }
-
-        const csrfResponse = await fetch("http://localhost:8085/api/user/csrf", {
-          credentials: "include",
-        });
-        const csrfToken = (await csrfResponse.json()).token;
-        if (!csrfToken) {
-          throw new Error("Authentication required");
-        }
-        
-        setIsLoading(true)
-        const response = await fetch('http://localhost:8085/api/music/songs', {
-          method: "GET",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "X-CSRF-TOKEN": csrfToken,
-            "Content-Type": "application/json"
-          },
-          credentials: "include"
-        });
-        
-        if (!response.ok) {
-          throw new Error(`HTTP error! Status: ${response.status}`)
-        }
-        
-        const data = await response.json()
-        
-        // Process song data and ensure each item has a unique ID
-        const songsWithIds = data.map((song: Song, index: number) => ({
-          ...song,
-          // Convert contendType to contentType if needed
-          contentType: song.contentType || song.contendType,
-          // If the song doesn't have an ID, use the index as a fallback
-          id: song.id || `song-${index}`, 
-          // Format duration from seconds to MM:SS if available
-          formattedDuration: song.durationSec ? formatDuration(song.durationSec) : "Unknown"
-        }))
-        
-        setMusicData(songsWithIds)
-        setError(null)
-      } catch (err) {
-        console.error("Error fetching music data:", err)
-        setError("Failed to load your music. Please try again later.")
-      } finally {
-        setIsLoading(false)
+      if (!token) {
+        router.push("/login");
+        return;
       }
-    }
 
+      const csrfResponse = await fetch("http://localhost:8085/api/user/csrf", {
+        credentials: "include",
+      });
+      const csrfToken = (await csrfResponse.json()).token;
+      if (!csrfToken) {
+        throw new Error("Authentication required");
+      }
+      
+      setIsLoading(true)
+      const response = await fetch('http://localhost:8085/api/music/songs', {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${getAuthToken()}`,
+          "X-CSRF-TOKEN": csrfToken,
+          "Content-Type": "application/json"
+        },
+        credentials: "include"
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`)
+      }
+      
+      const data = await response.json()
+      
+      // Process song data and ensure each item has a unique ID
+      const songsWithIds = data.map((song: Song, index: number) => ({
+        ...song,
+        // Convert contendType to contentType if needed
+        contentType: song.contentType || song.contendType,
+        // If the song doesn't have an ID, use the index as a fallback
+        id: song.id || `song-${index}`, 
+        // Format duration from seconds to MM:SS if available
+        formattedDuration: song.durationSec ? formatDuration(song.durationSec) : "Unknown"
+      }))
+      
+      setMusicData(songsWithIds)
+      setError(null)
+    } catch (err) {
+      console.error("Error fetching music data:", err)
+      setError("Failed to load your music. Please try again later.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
     fetchMusicData()
   }, [router])
 
@@ -301,13 +308,14 @@ export function MusicList() {
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
   }
 
+
   // Format file size to a human-readable format
   const formatFileSize = (bytes: number): string => {
-    if (!bytes) return "Unknown"
-    const mb = bytes / (1024 * 1024)
-    return `${mb.toFixed(2)} MB`
+    if (!bytes) return "Unknown";
+    if (bytes < 1024) return bytes + ' bytes';
+    else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    else return (bytes / 1048576).toFixed(1) + ' MB';
   }
-
   // Get filename from s3Key path
   const getFilenameFromPath = (path: string): string => {
     const parts = path.split('/')
@@ -382,10 +390,7 @@ export function MusicList() {
         }
         
         // Show success toast
-        toast({
-          title: "Song Deleted",
-          description: "The song has been removed from your library.",
-        })
+        toast.success("The song has been removed from your library.");
       } catch (err) {
         console.error("Error deleting song:", err)
         toast({
@@ -497,6 +502,153 @@ export function MusicList() {
     setIsPlayerExpanded(!isPlayerExpanded);
   }
 
+  const openModal = () => setIsModalOpen(true);
+  const closeModal = () => {
+    if (!isLoading) {
+      setIsModalOpen(false);
+      setSelectedFiles([]);
+      setUploadProgress(0);
+    }
+  };
+
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const filesArray = Array.from(e.target.files).filter(file => 
+        file.type.startsWith('audio/')
+      );
+      setSelectedFiles(filesArray);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const filesArray = Array.from(e.dataTransfer.files).filter(file => 
+        file.type.startsWith('audio/')
+      );
+      setSelectedFiles(filesArray);
+    }
+  };
+
+  const removeFile = (index) => {
+    const updatedFiles = [...selectedFiles];
+    updatedFiles.splice(index, 1);
+    setSelectedFiles(updatedFiles);
+  };
+
+  const handleUpload = async () => {
+    if (selectedFiles.length > 0) {
+      setIsLoading(true);
+      setUploadProgress(0);
+      
+      try {
+        // Create a FormData instance
+        const formData = new FormData();
+        
+        // Append each file to the FormData
+        selectedFiles.forEach(file => {
+          formData.append('file', file);
+        });
+        
+        // Upload files using Fetch API with a custom implementation for progress tracking
+        const uploadWithProgress = async () => {
+          // AbortController for cancellation if needed
+          const controller = new AbortController();
+          const signal = controller.signal;
+          
+          try {
+            // This is a workaround for tracking upload progress with fetch
+            // since fetch doesn't have built-in upload progress tracking
+            let loaded = 0;
+            const total = selectedFiles.reduce((sum, file) => sum + file.size, 0);
+            
+            // Create a counter to simulate progress
+            // In production, consider using a service worker or a library that supports progress
+            const progressInterval = setInterval(() => {
+              // Increment by random small amount until we reach close to 90%
+              // (saving the last 10% for server processing)
+              if (loaded < total * 0.9) {
+                loaded += total * 0.05 * Math.random();
+                if (loaded > total * 0.9) loaded = total * 0.9;
+                
+                const progress = Math.round((loaded / total) * 100);
+                setUploadProgress(progress);
+              }
+            }, 200);
+            const csrfResponse = await fetch("http://localhost:8085/api/user/csrf", {
+                   credentials: "include",
+            });
+             const csrfToken = (await csrfResponse.json()).token;
+            if (!csrfToken) {
+               throw new Error("Authentication required");
+            }
+            
+            // Actual fetch request
+            const response = await fetch('http://localhost:8085/api/music/upload', {
+              method: 'POST',
+              headers: {
+                "Authorization": `Bearer ${getAuthToken()}`,
+                "X-CSRF-TOKEN": csrfToken,
+              },
+              body: formData,
+              signal
+            });
+            
+            // Clear the progress interval
+            clearInterval(progressInterval);
+            
+            // Set to nearly complete while server processes
+            setUploadProgress(95);
+            
+            if (!response.ok) {
+              throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+            }
+            
+            // Complete the progress
+            setUploadProgress(100);
+            
+            // Get the response data
+            const result = await response.json();
+            return result;
+            
+          } catch (error) {
+            if (signal.aborted) {
+              throw new Error('Upload was cancelled');
+            }
+            throw error;
+          }
+        };
+        
+        // Execute the upload
+        const result = await uploadWithProgress();
+        
+        // Handle success
+        setIsLoading(false);
+        closeModal();
+        fetchMusicData();
+        setTimeout(() => {
+          toast.success(`${selectedFiles.length} music file(s) uploaded successfully!`);
+        }, 500); 
+        // Here you would typically refresh your music list
+        // refreshMusicList();
+        
+      } catch (error) {
+        setIsLoading(false);
+        toast.error(`Upload error: ${error.message}`);
+      }
+    }
+  };
+
   // Get current song details
   const currentSongDetails = currentSong ? musicData.find(song => song.id === currentSong) : null;
 
@@ -534,8 +686,9 @@ export function MusicList() {
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold">Your Music</h2>
         <div className="flex items-center gap-3">
+          <Toaster position="top-right"/>
           <div className="text-sm text-muted-foreground">{musicData.length} songs</div>
-          <Button size="sm" className="gap-2">
+          <Button size="sm" className="gap-2" onClick={openModal}>
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="16"
@@ -556,11 +709,131 @@ export function MusicList() {
           </Button>
         </div>
       </div>
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6 relative">
+            {/* Close Button */}
+            <button 
+              className={`absolute top-4 right-4 text-gray-500 ${isLoading ? 'opacity-50 cursor-not-allowed' : 'hover:text-gray-700'}`}
+              onClick={closeModal}
+              disabled={isLoading}
+            >
+              <X size={24} />
+            </button>
+
+            <h2 className="text-xl font-bold mb-6">Upload Music</h2>
+
+            {/* Drag & Drop Area */}
+            <div 
+              className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer ${
+                isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+              } ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => !isLoading && fileInputRef.current.click()}
+            >
+              <Music className="mx-auto text-gray-400 mb-4" size={48} />
+              <p className="text-lg font-medium text-gray-700 mb-2">
+                {selectedFiles.length > 0
+                  ? `${selectedFiles.length} music file(s) selected`
+                  : 'Drag and drop your music files here'}
+              </p>
+              <p className="text-gray-500 mb-4">
+                {selectedFiles.length === 0 && 'or click to browse'}
+              </p>
+              <p className="text-xs text-gray-400">
+                Supported formats: MP3, WAV, FLAC, AAC
+              </p>
+              <input
+                type="file"
+                multiple
+                accept="audio/*"
+                className="hidden"
+                onChange={handleFileChange}
+                ref={fileInputRef}
+                disabled={isLoading}
+              />
+            </div>
+
+            {/* File List */}
+            {selectedFiles.length > 0 && (
+              <div className="mt-6">
+                <h3 className="text-lg font-medium mb-3">Selected Files</h3>
+                <div className="bg-gray-50 rounded-lg p-4 max-h-60 overflow-y-auto">
+                  <ul className="space-y-3">
+                    {selectedFiles.map((file, index) => (
+                      <li key={index} className="flex justify-between items-center bg-white p-3 rounded-md shadow-sm">
+                        <div className="flex items-center">
+                          <Music size={20} className="text-blue-500 mr-3" />
+                          <div className="truncate max-w-xs">
+                            <p className="font-medium">{file.name}</p>
+                            <p className="text-gray-500 text-sm">{formatFileSize(file.size)}</p>
+                          </div>
+                        </div>
+                        {!isLoading && (
+                          <button 
+                            onClick={() => removeFile(index)}
+                            className="text-gray-400 hover:text-red-500"
+                          >
+                            <X size={18} />
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
+
+            {/* Progress Bar (shown when uploading) */}
+            {isLoading && (
+              <div className="mt-6">
+                <div className="flex justify-between text-sm mb-1">
+                  <span>Uploading...</span>
+                  <span>{uploadProgress}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                  <div 
+                    className="bg-blue-600 h-2.5 rounded-full" 
+                    style={{ width: `${uploadProgress}%` }}
+                  ></div>
+                </div>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="mt-6 flex justify-end gap-3">
+              <Button 
+                variant="outline" 
+                disabled={isLoading}
+                onClick={closeModal}
+              >
+                Cancel
+              </Button>
+              <Button
+                disabled={selectedFiles.length === 0 || isLoading}
+                onClick={handleUpload}
+                className="flex items-center gap-2"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader size={16} className="animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  'Upload Music'
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {musicData.length === 0 ? (
         <div className="text-center py-12 border rounded-md bg-muted/10">
           <p className="text-muted-foreground mb-2">You don't have any songs yet</p>
-          <Button size="sm" className="gap-2">
+          <Button size="sm" className="gap-2" onClick={openModal}>
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="16"
@@ -671,7 +944,7 @@ export function MusicList() {
         <div className={`fixed ${isPlayerExpanded ? 'inset-x-0 bottom-0 top-20 m-4' : 'bottom-4 right-4'} transition-all duration-300 ease-in-out`}>
           <div 
             className={`bg-background border rounded-lg shadow-lg overflow-hidden ${
-              isPlayerExpanded ? 'w-full h-full flex flex-col' : 'w-80'
+              isPlayerExpanded ? 'w-full h-full flex flex-col' : 'w-[32rem]'
             }`}
           >
             {/* Player header */}
