@@ -862,7 +862,7 @@ export function MusicList() {
       {/* Hidden audio element for playback */}
       <audio ref={audioRef} preload="auto" />
 
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold">Your Music</h2>
           <div className="text-sm text-muted-foreground">

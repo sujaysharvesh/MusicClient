@@ -82,15 +82,8 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     setIsGoogleLoading(true)
-
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      router.push("/music")
-    } catch (error) {
-      console.error("Google login failed:", error)
-    } finally {
-      setIsGoogleLoading(false)
-    }
+    // Redirect user to Google login (Spring Boot handles it)
+    window.location.href = "http://localhost:8085/oauth2/authorization/google"
   }
 
   return (

@@ -7,18 +7,52 @@ import { MusicPlayer } from "@/components/music-player";
 import { Button } from "@/components/ui/button";
 import { User, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/use-toast";
 
 export default function MusicPage() {
   const [userEmail, setUserEmail] = useState("user@example.com");
   const [loading, setLoading] = useState(true);
+  const [authenticated, setAuthenticated] = useState(false);
   const router = useRouter();
 
+  // Handle OAuth redirect with token in URL
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tokenFromUrl = params.get("token");
+  
+    if (tokenFromUrl) {
+      localStorage.setItem("token", tokenFromUrl);
+      console.log("Token stored from URL:", tokenFromUrl);
+  
+      toast({
+        title: "Login Success",
+        description: "You're now logged in with Google",
+      });
+  
+      // Remove token from URL
+      window.history.replaceState({}, document.title, "/music");
+      
+      // Set authenticated to trigger the data fetch
+      setAuthenticated(true);
+    } else {
+      // Check if we have a token in storage
+      const existingToken = localStorage.getItem("token");
+      if (existingToken) {
+        setAuthenticated(true);
+      } else {
+        router.push("/login");
+      }
+    }
+  }, [router]);
+
+  // Fetch user data and music list after authentication is confirmed
+  useEffect(() => {
+    if (!authenticated) return;
+    
     const fetchUserData = async () => {
       try {
         const token = localStorage.getItem("token");
-        console.log("Token from cookie/localStorage:", token);
+        console.log("Using token for API calls:", token);
 
         if (!token) {
           router.push("/login");
@@ -28,13 +62,23 @@ export default function MusicPage() {
         const csrfResponse = await fetch("http://localhost:8085/api/user/csrf", {
           credentials: "include",
         });
-        const csrfToken = (await csrfResponse.json()).token;
-        if (!csrfToken) {
-          throw new Error("Authentication required");
+        
+        if (!csrfResponse.ok) {
+          throw new Error("Failed to fetch CSRF token");
         }
-        console.log("Fetching from /api/music/me with token:", token, "and CSRF:", csrfToken);
+        
+        const csrfData = await csrfResponse.json();
+        const csrfToken = csrfData.token;
+        
+        if (!csrfToken) {
+          throw new Error("Authentication required - no CSRF token");
+        }
+        
+        console.log("Fetched CSRF token:", csrfToken);
 
-        const response = await fetch("http://localhost:8085/api/music/me", {
+        // Use the correct endpoint based on your backend implementation
+        // This could be either /api/user/me or /api/music/me
+        const response = await fetch("http://localhost:8085/api/user/me", {
           method: "GET",
           headers: {
             "Authorization": `Bearer ${token}`,
@@ -45,30 +89,48 @@ export default function MusicPage() {
         });
 
         if (response.status === 401) {
+          console.error("Authentication failed - 401 response");
+          localStorage.removeItem("token");
           router.push("/login");
           return;
         }
 
         if (!response.ok) {
-          console.error("Error fetching user data:", response.statusText);
-          throw new Error(`HTTP error! status: ${response.status}, ${await response.text()}`);
+          console.error("Error fetching user data:", response.status, response.statusText);
+          const errorText = await response.text();
+          console.error("Error details:", errorText);
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         const userData = await response.json();
-        setUserEmail(userData.name);
+        setUserEmail(userData.email || userData.name);
+        setLoading(false);
       } catch (error) {
         console.error("Fetch error:", error);
-        toast.error("Failed to load user data");
-      } finally {
+        toast({
+          title: "Error",
+          description: "Failed to load user data. Please try again.",
+          variant: "destructive"
+        });
         setLoading(false);
       }
     };
 
     fetchUserData();
-  }, [router]);
+  }, [authenticated, router]);
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    setAuthenticated(false);
+    router.push("/login");
+    toast({
+      title: "Logged out",
+      description: "You have been successfully logged out",
+    });
+  };
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8">
       <header className="border-b p-4 flex justify-between items-center">
         <h1 className="text-xl font-bold">Music Player</h1>
         <div className="flex items-center gap-3">
@@ -80,17 +142,22 @@ export default function MusicPage() {
           <Button variant="ghost" size="icon">
             <User className="h-5 w-5" />
           </Button>
-          <Link href="/login">
-            <Button variant="outline" size="sm" className="flex items-center gap-1">
-              <LogOut className="h-4 w-4" />
-              Logout
-            </Button>
-          </Link>
+          <Button 
+            onClick={handleLogout}
+            variant="outline" 
+            size="sm" 
+            className="flex items-center gap-1"
+          >
+            <LogOut className="h-4 w-4" />
+            Logout
+          </Button>
         </div>
       </header>
 
       <main className="flex-1 p-4 overflow-auto">
-        <MusicList />
+        <div className="max-w-6xl mx-auto w-full px-4 sm:px-6 lg:px-8">
+          <MusicList />
+        </div>
       </main>
     </div>
   );
