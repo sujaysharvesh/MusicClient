@@ -9,7 +9,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Separator } from "@/components/ui/separator"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner";
+
+
 
 export default function LoginPage() {
   const router = useRouter()
@@ -20,7 +22,7 @@ export default function LoginPage() {
     password: "",
     rememberMe: false,
   })
-
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     setFormData((prev) => ({
@@ -41,8 +43,9 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
-      const res = await fetch("http://localhost:8085/api/user/login", {
+      const res = await fetch(`${baseUrl}/api/user/login`, {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
@@ -56,25 +59,16 @@ export default function LoginPage() {
 
       if (res.ok) {
         localStorage.setItem("token", data.token)
-        toast({
-          title: "Login successful",
-          description: "Welcome back to the Pharma Research Portal",
-        })
+        toast.success("Welcome back to the VibeSter Music Player!")
         router.push("/music")
+      } else if (res.status === 404) {
+        toast.error("User not found")
       } else {
-        toast({
-          title: "Login failed",
-          description: data.message || "Invalid credentials",
-          variant: "destructive",
-        })
+        toast.error(data.message || "Invalid credentials")
       }
     } catch (error) {
       console.error("Login failed:", error)
-      toast({
-        title: "Login error",
-        description: "Something went wrong. Please try again later.",
-        variant: "destructive",
-      })
+      toast.error("Something went wrong. Please try again later.")
     } finally {
       setIsLoading(false)
     }
@@ -83,17 +77,17 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setIsGoogleLoading(true)
     // Redirect user to Google login (Spring Boot handles it)
-    window.location.href = "http://localhost:8085/oauth2/authorization/google"
+    window.location.href = `${baseUrl}/oauth2/authorization/google`
   }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
       <div className="w-full max-w-md space-y-8">
+        
         <div className="text-center">
           <h1 className="text-2xl font-bold">Music Player</h1>
           <p className="text-muted-foreground mt-2">Sign in to your account</p>
         </div>
-
         <div className="bg-card border rounded-lg p-6 shadow-sm">
           <Button
             variant="outline"

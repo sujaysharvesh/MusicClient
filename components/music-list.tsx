@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
 import {
   Play,
   Pause,
@@ -16,11 +15,16 @@ import {
   SkipForward,
   Maximize2,
   Minimize2,
-  Loader,
   X,
   Music,
   Shuffle,
+  Search,
+  Loader,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,20 +35,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { toast, Toaster } from "sonner";
-import { Slider } from "@/components/ui/slider";
-import { usePlayerStore } from "@/lib/CurrentUserSong";
-import { Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import * as dotenv from 'dotenv';
+dotenv.config();
+
 // Interface for the song data structure from API
 interface Song {
   title: string;
   s3Key: string;
-  contentType?: string; // Fixed from API response which shows "contendType"
-  contendType?: string; // Added for API compatibility
+  contentType?: string;
+  contendType?: string;
   durationSec: number;
   fileSize: number;
-  id?: string; // UUID as string
+  id?: string;
   formattedDuration?: string;
 }
 
@@ -63,26 +65,22 @@ export function MusicList() {
   const [duration, setDuration] = useState(0);
   const [isLoadingSong, setIsLoadingSong] = useState(false);
   const [audioSrc, setAudioSrc] = useState<string | null>(null);
-  // Add a state to control the player popup visibility
   const [showPlayerPopup, setShowPlayerPopup] = useState(false);
-  // Add state for expanded/minimized player view
   const [isPlayerExpanded, setIsPlayerExpanded] = useState(false);
   const [isShuffleEnabled, setIsShuffleEnabled] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
 
+  // Upload related states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
-  const [isUploadLoading, setIsUploadLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef(null);
 
-  const { setCurrentUserSong } = usePlayerStore();
-
   // Audio element reference
   const audioRef = useRef<HTMLAudioElement | null>(null);
-
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
   const getAuthToken = () => {
     return localStorage.getItem("token") || "";
   };
@@ -91,14 +89,13 @@ export function MusicList() {
   const fetchMusicData = async () => {
     try {
       const token = localStorage.getItem("token");
-      console.log("Token from localStorage:", token);
 
       if (!token) {
         router.push("/login");
         return;
       }
 
-      const csrfResponse = await fetch("http://localhost:8085/api/user/csrf", {
+      const csrfResponse = await fetch(`${baseUrl}/api/user/csrf`, {
         credentials: "include",
       });
       const csrfToken = (await csrfResponse.json()).token;
@@ -107,7 +104,7 @@ export function MusicList() {
       }
 
       setIsLoading(true);
-      const response = await fetch("http://localhost:8085/api/music/songs", {
+      const response = await fetch(`${baseUrl}/api/music/songs`, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${getAuthToken()}`,
@@ -126,11 +123,8 @@ export function MusicList() {
       // Process song data and ensure each item has a unique ID
       const songsWithIds = data.map((song: Song, index: number) => ({
         ...song,
-        // Convert contendType to contentType if needed
         contentType: song.contentType || song.contendType,
-        // If the song doesn't have an ID, use the index as a fallback
         id: song.id || `song-${index}`,
-        // Format duration from seconds to MM:SS if available
         formattedDuration: song.durationSec
           ? formatDuration(song.durationSec)
           : "Unknown",
@@ -154,33 +148,41 @@ export function MusicList() {
     setSearchQuery(e.target.value);
   };
   
-  // Add a function to filter music based on search query
+  const getFilenameFromPath = (path: string): string => {
+    if (!path) return "Unknown"; 
+    const parts = path.split("/");
+    return parts[parts.length - 1].split(".")[0];
+  };
+
+  // Filter music based on search query
   const filteredMusicData = searchQuery
-    ? musicData.filter((song) => 
-        song.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        getFilenameFromPath(song.s3Key).toLowerCase().includes(searchQuery.toLowerCase())
+    ? musicData.filter(
+        (song) =>
+          song.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          getFilenameFromPath(song.s3Key)
+            .toLowerCase()
+            .includes(searchQuery.toLowerCase())
       )
     : musicData;
-  
-  // Add a function to play a random song from the library
+
+  // Play a random song from the library
   const playRandomSongFromLibrary = () => {
     if (musicData.length === 0) return;
-    
+
     const randomIndex = Math.floor(Math.random() * musicData.length);
     const randomSong = musicData[randomIndex];
-    
+
     if (randomSong && randomSong.id) {
       setCurrentSong(randomSong.id);
       setIsPlaying(true);
       setShowPlayerPopup(true);
-      
-      // Set shuffle mode to true for continuous random play
       setIsShuffleEnabled(true);
-      
+
       toast.success("Playing random songs from your library");
     }
   };
-  // Set up audio event listeners only once
+
+  // Play a random song
   const playRandomSong = () => {
     if (!musicData.length) return;
     let availableSongs = musicData.filter((song) => song.id !== currentSong);
@@ -192,12 +194,12 @@ export function MusicList() {
     const randomIndex = Math.floor(Math.random() * availableSongs.length);
     const randomSong = availableSongs[randomIndex];
     if (randomSong && randomSong.id) {
-      // Just update the current song ID, don't call play directly
       setCurrentSong(randomSong.id);
-      // Keep isPlaying true to ensure autoplay works
       setIsPlaying(true);
     }
   };
+
+  // Set up audio event listeners
   useEffect(() => {
     if (!audioRef.current) return;
 
@@ -212,13 +214,9 @@ export function MusicList() {
     };
 
     const handleEnded = () => {
-      // Before playing the next song, set a flag to avoid interruption
-      const isPlayingNextSong = true;
-      let nextSongId = null;
       if (isShuffleEnabled) {
         playRandomSong();
       } else {
-        // For sequential playback
         if (!currentSong || musicData.length === 0) return;
 
         const currentIndex = musicData.findIndex(
@@ -230,13 +228,7 @@ export function MusicList() {
         const nextSong = musicData[nextIndex];
 
         if (nextSong && nextSong.id) {
-          // Just update the current song ID, don't call play directly
           setCurrentSong(nextSong.id);
-          // Keep isPlaying true to ensure autoplay works
-          setIsPlaying(true);
-        }
-        if (nextSongId) {
-          setCurrentSong(nextSongId);
           setIsPlaying(true);
         }
       }
@@ -248,15 +240,10 @@ export function MusicList() {
     };
 
     const handleLoadedData = () => {
-      console.log("Audio data loaded, isPlaying:", isPlaying);
       setIsLoadingSong(false);
 
-      // Only try to play if we're supposed to be playing
       if (isPlaying) {
-        // Use a small timeout to ensure the browser is ready
-        // This helps avoid play/pause race conditions
         setTimeout(() => {
-          console.log("Attempting to play after timeout");
           if (audioRef.current && isPlaying) {
             const playPromise = audioRef.current.play();
             if (playPromise !== undefined) {
@@ -274,15 +261,13 @@ export function MusicList() {
     };
 
     const handleError = (e: Event) => {
-      // Use a more resilient error handling approach
       const errorEvent = e as ErrorEvent;
-      console.error(
-        "Audio error occurred:",
-        errorEvent.message || "Unknown error"
-      );
+      console.error("Audio error:", errorEvent.message || "Unknown error");
       setIsLoadingSong(false);
       setIsPlaying(false);
-      toast.error("Playback Error Unable to play this song. Please try again.");
+      toast.error(
+        "Playback Error: Unable to play this song. Please try again."
+      );
     };
 
     // Add event listeners
@@ -302,13 +287,11 @@ export function MusicList() {
       audio.removeEventListener("loadeddata", handleLoadedData);
       audio.removeEventListener("error", handleError);
     };
-  }, [isPlaying, isShuffleEnabled]); // Re-attach if isPlaying changes
+  }, [isPlaying, isShuffleEnabled, currentSong, musicData]);
 
-  // Play/pause toggling effect
+  // Set up audio source when audioSrc changes
   useEffect(() => {
     if (!audioRef.current || !audioSrc) return;
-
-    console.log("Setting new audio source:", audioSrc);
 
     // Stop any current playback first
     audioRef.current.pause();
@@ -318,21 +301,15 @@ export function MusicList() {
 
     // Force loading of new media
     audioRef.current.load();
-
-    // Audio will be played by the loadeddata event handler
-    // We don't call play() here to avoid race conditions
   }, [audioSrc]);
 
+  // Handle play/pause state changes
   useEffect(() => {
     if (!audioRef.current || !audioSrc) return;
-
-    console.log("isPlaying changed to:", isPlaying);
 
     if (isPlaying) {
       // Only attempt to play if audio is ready
       if (audioRef.current.readyState >= 2) {
-        // HAVE_CURRENT_DATA or higher
-        console.log("Audio ready, attempting to play");
         const playPromise = audioRef.current.play();
 
         if (playPromise !== undefined) {
@@ -342,12 +319,8 @@ export function MusicList() {
             toast.error("Unable to play this song. Please try again.");
           });
         }
-      } else {
-        console.log("Audio not ready yet, waiting for loadeddata event");
-        // We'll rely on the loadeddata event to start playback
       }
     } else {
-      console.log("Pausing audio");
       audioRef.current.pause();
     }
   }, [isPlaying, audioSrc]);
@@ -356,7 +329,7 @@ export function MusicList() {
   useEffect(() => {
     if (!currentSong) {
       setAudioSrc(null);
-      setShowPlayerPopup(false); // Hide player when no song is selected
+      setShowPlayerPopup(false);
       return;
     }
 
@@ -366,59 +339,63 @@ export function MusicList() {
     const prepareSongForPlayback = async () => {
       try {
         setIsLoadingSong(true);
-
+    
         const token = getAuthToken();
         if (!token) {
           router.push("/login");
           return;
         }
-
+    
         // Get CSRF token
         const csrfResponse = await fetch(
-          "http://localhost:8085/api/user/csrf",
+          `${baseUrl}/api/user/csrf`,
           {
             credentials: "include",
           }
         );
         const csrfData = await csrfResponse.json();
         const csrfToken = csrfData.token;
-
+    
         if (!csrfToken) {
           throw new Error("Authentication required");
         }
-
-        // Create audio source URL
-        const respone = fetch(
-          `http://localhost:8085/api/music/stream/${currentSong}`,
+    
+        // Create audio source URL with proper headers for streaming
+        const response = await fetch(
+          `${baseUrl}/api/music/stream/${currentSong}`,
           {
             method: "GET",
+            credentials: "include",
             headers: {
               Authorization: `Bearer ${token}`,
               "X-CSRF-TOKEN": csrfToken,
-              byteRange: "bytes=0-",
+              // Don't send byteRange header here - use Range instead
+              Range: "bytes=0-",
             },
           }
         );
-        const blob = (await respone).blob();
-        const src = URL.createObjectURL(await blob);
-
+    
+        if (!response.ok) {
+          throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+        }
+    
+        const blob = await response.blob();
+        const src = URL.createObjectURL(blob);
+    
         if (audioSrc) {
           URL.revokeObjectURL(audioSrc);
         }
-
+    
         setAudioSrc(src);
-        // Reset any previous errors
+        setIsLoadingSong(false);
         setError(null);
       } catch (error) {
         console.error("Error preparing song:", error);
         setIsLoadingSong(false);
         setIsPlaying(false);
-        toast.success({
-          title: "Error",
-          description:
-            "Failed to prepare the song for playback. Please try again.",
-          variant: "destructive",
-        });
+        toast.error(
+          `Failed to prepare the song for playback: ${error.message || "Unknown error"}`
+        );
       }
     };
 
@@ -429,20 +406,6 @@ export function MusicList() {
       }
     };
   }, [currentSong, router]);
-
-  // Apply audio source to the audio element when it changes
-  useEffect(() => {
-    if (!audioRef.current || !audioSrc) return;
-
-    // Stop any current playback first
-    audioRef.current.pause();
-
-    // Set new source and load it
-    audioRef.current.src = audioSrc;
-    audioRef.current.load();
-
-    // Audio will play after loaded, via the loadeddata event
-  }, [audioSrc]);
 
   // Helper function to format duration from seconds to MM:SS
   const formatDuration = (seconds: number): string => {
@@ -459,28 +422,20 @@ export function MusicList() {
     else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
     else return (bytes / 1048576).toFixed(1) + " MB";
   };
-  // Get filename from s3Key path
-  const getFilenameFromPath = (path: string): string => {
-    const parts = path.split("/");
-    return parts[parts.length - 1].split(".")[0];
-  };
 
   const handlePlayPause = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent navigation when clicking play/pause
+    e.stopPropagation();
 
     if (currentSong === id) {
-      // If already selected, just toggle play state
       setIsPlaying(!isPlaying);
     } else {
-      // If selecting a new song, set it and prepare to play
       setCurrentSong(id);
-      // We'll set isPlaying to true, but actual playback will happen after loading
       setIsPlaying(true);
     }
   };
 
   const handleDeleteSong = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent navigation when clicking delete
+    e.stopPropagation();
     setSongToDelete(id);
   };
 
@@ -497,7 +452,7 @@ export function MusicList() {
 
         // Get CSRF token
         const csrfResponse = await fetch(
-          "http://localhost:8085/api/user/csrf",
+          `${baseUrl}/api/user/csrf`,
           {
             credentials: "include",
           }
@@ -511,7 +466,7 @@ export function MusicList() {
 
         // Call the delete API endpoint
         const response = await fetch(
-          `http://localhost:8085/api/music/delete/${songToDelete}`,
+          `${baseUrl}/api/music/delete/${songToDelete}`,
           {
             method: "DELETE",
             headers: {
@@ -541,21 +496,17 @@ export function MusicList() {
           setAudioSrc(null);
         }
 
-        // Show success toast
         toast.success("The song has been removed from your library.");
       } catch (err) {
         console.error("Error deleting song:", err);
-        toast({
-          title: "Delete Failed",
-          description:
-            err instanceof Error
-              ? err.message
-              : "Unable to delete song. Please try again.",
-          variant: "destructive",
-        });
+        toast.error(
+          err instanceof Error
+            ? err.message
+            : "Unable to delete song. Please try again."
+        );
       } finally {
         setIsDeleting(false);
-        setSongToDelete(null); // Reset the song to delete
+        setSongToDelete(null);
       }
     }
   };
@@ -577,12 +528,10 @@ export function MusicList() {
       audioRef.current.volume = volumeValue;
       setVolume(volumeValue);
 
-      // If volume is set to 0, mute the audio
       if (volumeValue === 0) {
         audioRef.current.muted = true;
         setIsMuted(true);
       } else if (isMuted) {
-        // If volume is increased from 0, unmute
         audioRef.current.muted = false;
         setIsMuted(false);
       }
@@ -594,14 +543,6 @@ export function MusicList() {
       audioRef.current.currentTime = newTime[0];
       setCurrentTime(newTime[0]);
     }
-  };
-
-  const handlePlay = (song: Song) => {
-    setCurrentUserSong({
-      id: song.id,
-      title: song.title,
-      duration: formatDuration(song.durationSec),
-    });
   };
 
   const playNextSong = () => {
@@ -639,31 +580,19 @@ export function MusicList() {
     }
   };
 
-  // This function will be used for the "View Details" button
-  // rather than clicking on the whole row
-  const navigateToSongDetail = (song: Song, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent any other click handlers
-    router.push(`/music/song/${song.id}`);
-  };
-
   // Function to close the player popup
   const closePlayer = () => {
-    // First pause the audio to prevent any playback attempts
     if (audioRef.current) {
       audioRef.current.pause();
-
-      // Remove the src attribute and load to properly release the audio resource
       audioRef.current.removeAttribute("src");
       audioRef.current.load();
     }
 
-    // Clean up any object URLs to prevent memory leaks
     if (audioSrc) {
       URL.revokeObjectURL(audioSrc);
       setAudioSrc(null);
     }
 
-    // Update state last, after audio resources are cleaned up
     setShowPlayerPopup(false);
     setIsPlaying(false);
     setCurrentSong(null);
@@ -724,107 +653,61 @@ export function MusicList() {
       setUploadProgress(0);
 
       try {
-        // Create a FormData instance
         const formData = new FormData();
-
-        // Append each file to the FormData
         selectedFiles.forEach((file) => {
-          formData.append("file", file);
+          formData.append("files", file);
         });
 
-        // Upload files using Fetch API with a custom implementation for progress tracking
-        const uploadWithProgress = async () => {
-          // AbortController for cancellation if needed
-          const controller = new AbortController();
-          const signal = controller.signal;
-
-          try {
-            // This is a workaround for tracking upload progress with fetch
-            // since fetch doesn't have built-in upload progress tracking
-            let loaded = 0;
-            const total = selectedFiles.reduce(
-              (sum, file) => sum + file.size,
-              0
-            );
-
-            // Create a counter to simulate progress
-            // In production, consider using a service worker or a library that supports progress
-            const progressInterval = setInterval(() => {
-              // Increment by random small amount until we reach close to 90%
-              // (saving the last 10% for server processing)
-              if (loaded < total * 0.9) {
-                loaded += total * 0.05 * Math.random();
-                if (loaded > total * 0.9) loaded = total * 0.9;
-
-                const progress = Math.round((loaded / total) * 100);
-                setUploadProgress(progress);
-              }
-            }, 200);
-            const csrfResponse = await fetch(
-              "http://localhost:8085/api/user/csrf",
-              {
-                credentials: "include",
-              }
-            );
-            const csrfToken = (await csrfResponse.json()).token;
-            if (!csrfToken) {
-              throw new Error("Authentication required");
+        const progressInterval = setInterval(() => {
+          setUploadProgress((prev) => {
+            if (prev < 90) {
+              return prev + Math.floor(Math.random() * 5);
             }
+            return prev;
+          });
+        }, 200);
 
-            // Actual fetch request
-            const response = await fetch(
-              "http://localhost:8085/api/music/upload",
-              {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${getAuthToken()}`,
-                  "X-CSRF-TOKEN": csrfToken,
-                },
-                body: formData,
-                signal,
-              }
-            );
-
-            // Clear the progress interval
-            clearInterval(progressInterval);
-
-            // Set to nearly complete while server processes
-            setUploadProgress(95);
-
-            if (!response.ok) {
-              throw new Error(
-                `Server responded with ${response.status}: ${response.statusText}`
-              );
-            }
-
-            // Complete the progress
-            setUploadProgress(100);
-
-            // Get the response data
-            const result = await response.json();
-            return result;
-          } catch (error) {
-            if (signal.aborted) {
-              throw new Error("Upload was cancelled");
-            }
-            throw error;
+        const csrfResponse = await fetch(
+          `${baseUrl}/api/user/csrf`,
+          {
+            credentials: "include",
           }
-        };
+        );
+        const csrfToken = (await csrfResponse.json()).token;
+        if (!csrfToken) {
+          throw new Error("Authentication required");
+        }
 
-        // Execute the upload
-        const result = await uploadWithProgress();
+        const response = await fetch(`${baseUrl}/api/music/upload`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${getAuthToken()}`,
+            "X-CSRF-TOKEN": csrfToken,
+          },
+          body: formData,
+        });
 
-        // Handle success
+        clearInterval(progressInterval);
+        setUploadProgress(95);
+
+        if (!response.ok) {
+          throw new Error(
+            `Server responded with ${response.status}: ${response.statusText}`
+          );
+        }
+
+        setUploadProgress(100);
+        await response.json();
+
         setIsLoading(false);
         closeModal();
         fetchMusicData();
+
         setTimeout(() => {
           toast.success(
             `${selectedFiles.length} music file(s) uploaded successfully!`
           );
         }, 500);
-        // Here you would typically refresh your music list
-        // refreshMusicList();
       } catch (error) {
         setIsLoading(false);
         toast.error(`Upload error: ${error.message}`);
@@ -839,7 +722,7 @@ export function MusicList() {
 
   if (isLoading) {
     return (
-      <div className="p-8 flex justify-center items-center">
+      <div className="p-4 md:p-8 flex justify-center items-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -862,7 +745,7 @@ export function MusicList() {
       {/* Hidden audio element for playback */}
       <audio ref={audioRef} preload="auto" />
 
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 md:mb-8 gap-2">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold">Your Music</h2>
           <div className="text-sm text-muted-foreground">
@@ -870,9 +753,9 @@ export function MusicList() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {showSearch ? (
-            <div className="relative w-64">
+            <div className="relative w-full sm:w-64">
               <Input
                 type="text"
                 placeholder="Search songs..."
@@ -896,28 +779,26 @@ export function MusicList() {
             <Button
               variant="outline"
               size="sm"
-              className="gap-2"
+              className="gap-1"
               onClick={() => setShowSearch(true)}
             >
               <Search className="h-4 w-4" />
-              Search
+              <span className="hidden sm:inline">Search</span>
             </Button>
           )}
 
           <Button
             variant="outline"
             size="sm"
-            className="gap-2"
+            className="gap-1"
             onClick={playRandomSongFromLibrary}
             disabled={musicData.length === 0}
           >
             <Shuffle className="h-4 w-4" />
-            Random Play
+            <span className="hidden sm:inline">Random</span>
           </Button>
 
-          <Toaster position="top-right" />
-
-          <Button size="sm" className="gap-2" onClick={openModal}>
+          <Button size="sm" className="gap-1" onClick={openModal}>
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="16"
@@ -934,16 +815,17 @@ export function MusicList() {
               <polyline points="17 8 12 3 7 8" />
               <line x1="12" x2="12" y1="3" y2="15" />
             </svg>
-            Upload
+            <span className="hidden sm:inline">Upload</span>
           </Button>
         </div>
       </div>
+
+      {/* Upload Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6 relative">
-            {/* Close Button */}
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md md:max-w-2xl p-4 md:p-6 relative">
             <button
-              className={`absolute top-4 right-4 text-gray-500 ${
+              className={`absolute top-2 right-2 md:top-4 md:right-4 text-gray-500 ${
                 isLoading
                   ? "opacity-50 cursor-not-allowed"
                   : "hover:text-gray-700"
@@ -951,14 +833,14 @@ export function MusicList() {
               onClick={closeModal}
               disabled={isLoading}
             >
-              <X size={24} />
+              <X size={20} />
             </button>
 
-            <h2 className="text-xl font-bold mb-6">Upload Music</h2>
+            <h2 className="text-xl font-bold mb-4 md:mb-6">Upload Music</h2>
 
             {/* Drag & Drop Area */}
             <div
-              className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer ${
+              className={`border-2 border-dashed rounded-lg p-4 md:p-8 text-center cursor-pointer ${
                 isDragging ? "border-blue-500 bg-blue-50" : "border-gray-300"
               } ${isLoading ? "opacity-50 pointer-events-none" : ""}`}
               onDragOver={handleDragOver}
@@ -966,18 +848,16 @@ export function MusicList() {
               onDrop={handleDrop}
               onClick={() => !isLoading && fileInputRef.current.click()}
             >
-              <Music className="mx-auto text-gray-400 mb-4" size={48} />
-              <p className="text-lg font-medium text-gray-700 mb-2">
+              <Music className="mx-auto text-gray-400 mb-2 md:mb-4" size={36} />
+              <p className="text-base md:text-lg font-medium text-gray-700 mb-1 md:mb-2">
                 {selectedFiles.length > 0
-                  ? `${selectedFiles.length} music file(s) selected`
-                  : "Drag and drop your music files here"}
+                  ? `${selectedFiles.length} file(s) selected`
+                  : "Drag and drop music files"}
               </p>
-              <p className="text-gray-500 mb-4">
+              <p className="text-gray-500 mb-2 md:mb-4">
                 {selectedFiles.length === 0 && "or click to browse"}
               </p>
-              <p className="text-xs text-gray-400">
-                Supported formats: MP3, WAV, FLAC, AAC
-              </p>
+              <p className="text-xs text-gray-400">MP3, WAV, FLAC, AAC</p>
               <input
                 type="file"
                 multiple
@@ -991,30 +871,40 @@ export function MusicList() {
 
             {/* File List */}
             {selectedFiles.length > 0 && (
-              <div className="mt-6">
-                <h3 className="text-lg font-medium mb-3">Selected Files</h3>
-                <div className="bg-gray-50 rounded-lg p-4 max-h-60 overflow-y-auto">
-                  <ul className="space-y-3">
+              <div className="mt-4 md:mt-6">
+                <h3 className="text-lg font-medium mb-2 md:mb-3">
+                  Selected Files
+                </h3>
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-2 md:p-4 max-h-48 md:max-h-60 overflow-y-auto">
+                  <ul className="space-y-2 md:space-y-3">
                     {selectedFiles.map((file, index) => (
                       <li
                         key={index}
-                        className="flex justify-between items-center bg-white p-3 rounded-md shadow-sm"
+                        className="flex justify-between items-center bg-white dark:bg-gray-600 p-2 md:p-3 rounded-md shadow-sm"
                       >
-                        <div className="flex items-center">
-                          <Music size={20} className="text-blue-500 mr-3" />
-                          <div className="truncate max-w-xs">
-                            <p className="font-medium">{file.name}</p>
-                            <p className="text-gray-500 text-sm">
+                        <div className="flex items-center flex-1 min-w-0">
+                          <Music
+                            size={16}
+                            className="text-blue-500 mr-2 md:mr-3 flex-shrink-0"
+                          />
+                          <div className="truncate">
+                            <p className="text-sm font-medium truncate">
+                              {file.name}
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-300">
                               {formatFileSize(file.size)}
                             </p>
                           </div>
                         </div>
                         {!isLoading && (
                           <button
-                            onClick={() => removeFile(index)}
-                            className="text-gray-400 hover:text-red-500"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeFile(index);
+                            }}
+                            className="text-gray-400 hover:text-red-500 ml-2 flex-shrink-0"
                           >
-                            <X size={18} />
+                            <X size={16} />
                           </button>
                         )}
                       </li>
@@ -1024,16 +914,16 @@ export function MusicList() {
               </div>
             )}
 
-            {/* Progress Bar (shown when uploading) */}
+            {/* Progress Bar */}
             {isLoading && (
-              <div className="mt-6">
+              <div className="mt-4 md:mt-6">
                 <div className="flex justify-between text-sm mb-1">
                   <span>Uploading...</span>
                   <span>{uploadProgress}%</span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                   <div
-                    className="bg-blue-600 h-2.5 rounded-full"
+                    className="bg-blue-600 h-2 rounded-full"
                     style={{ width: `${uploadProgress}%` }}
                   ></div>
                 </div>
@@ -1041,11 +931,13 @@ export function MusicList() {
             )}
 
             {/* Action Buttons */}
-            <div className="mt-6 flex justify-end gap-3">
+            <div className="mt-4 md:mt-6 flex justify-end gap-2 md:gap-3">
               <Button
                 variant="outline"
                 disabled={isLoading}
                 onClick={closeModal}
+                size="sm"
+                className="px-3 py-1"
               >
                 Cancel
               </Button>
@@ -1180,12 +1072,14 @@ export function MusicList() {
           className={`fixed ${
             isPlayerExpanded
               ? "inset-x-0 bottom-0 top-20 m-4"
-              : "bottom-4 right-4"
+              : "flex-1 flex flex-col items-center justify-center mb-4 bottom-4 inset-x-0 "
           } transition-all duration-300 ease-in-out`}
         >
           <div
-            className={`bg-background border rounded-lg shadow-lg overflow-hidden ${
-              isPlayerExpanded ? "w-full h-full flex flex-col" : "w-[32rem]"
+            className={`bg-background border rounded-lg shadow-lg overflow-hidden mx-auto ${
+              isPlayerExpanded
+                ? "w-full h-full flex flex-col"
+                : "w-full max-w-md"
             }`}
           >
             {/* Player header */}
@@ -1278,8 +1172,6 @@ export function MusicList() {
                   <div>{formatDuration(duration)}</div>
                 </div>
               </div>
-
-              {/* Playback controls */}
               {/* Playback controls */}
               <div className="flex items-center justify-center gap-2 mb-3">
                 {/* Shuffle button */}
@@ -1330,8 +1222,9 @@ export function MusicList() {
                 </Button>
               </div>
 
-              {/* Volume control - reduced size in expanded view */}
-              <div className="flex items-center gap-2">
+
+              {/* Volume control */}
+              <div className="flex right-0 items-center gap-2 w-32">
                 <Button
                   variant="ghost"
                   size="icon"
@@ -1345,14 +1238,12 @@ export function MusicList() {
                   )}
                 </Button>
 
-                <div className={isPlayerExpanded ? "w-32" : "flex-1"}>
-                  <Slider
-                    value={[isMuted ? 0 : volume]}
-                    max={1}
-                    step={0.01}
-                    onValueChange={handleVolumeChange}
-                  />
-                </div>
+                <Slider
+                  value={[isMuted ? 0 : volume]}
+                  max={1}
+                  step={0.01}
+                  onValueChange={handleVolumeChange}
+                />
               </div>
             </div>
           </div>

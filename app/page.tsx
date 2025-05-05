@@ -16,7 +16,7 @@ export default function Home() {
         <div className="space-y-4">
           <p className="text-xl">Your favorite tunes, all in one place.</p>
           <p className="text-muted-foreground">
-            Login to start listening to millions of songs and create your own playlists.
+            Login to start create your own playlists.
           </p>
         </div>
 

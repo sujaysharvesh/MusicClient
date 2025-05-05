@@ -8,13 +8,29 @@ import { Button } from "@/components/ui/button";
 import { User, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "@/components/ui/use-toast";
+import { set } from "react-hook-form";
+import * as dotenv from 'dotenv';
+dotenv.config();
 
 export default function MusicPage() {
-  const [userEmail, setUserEmail] = useState("user@example.com");
+  const [userName, setUserName] = useState("User");
   const [loading, setLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
   const router = useRouter();
 
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+
+  const getCSTFToken = async () => {
+    const csrfResponse = await fetch(`${baseUrl}/api/user/csrf `, {
+      credentials: "include",
+    })
+
+    if(!csrfResponse) {
+      throw new Error("Failed to fetch CSRF token");
+    }
+    const csrfData = await csrfResponse.json();
+    return csrfData.token;
+  }
   // Handle OAuth redirect with token in URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -59,33 +75,15 @@ export default function MusicPage() {
           return;
         }
 
-        const csrfResponse = await fetch("http://localhost:8085/api/user/csrf", {
-          credentials: "include",
-        });
-        
-        if (!csrfResponse.ok) {
-          throw new Error("Failed to fetch CSRF token");
-        }
-        
-        const csrfData = await csrfResponse.json();
-        const csrfToken = csrfData.token;
-        
-        if (!csrfToken) {
-          throw new Error("Authentication required - no CSRF token");
-        }
-        
-        console.log("Fetched CSRF token:", csrfToken);
-
-        // Use the correct endpoint based on your backend implementation
-        // This could be either /api/user/me or /api/music/me
-        const response = await fetch("http://localhost:8085/api/user/me", {
+        const csrfToken = await getCSTFToken();
+        const response = await fetch(`${baseUrl}/api/user/me`, {
           method: "GET",
           headers: {
-            "Authorization": `Bearer ${token}`,
+            Authorization: `Bearer ${token}`,
             "X-CSRF-TOKEN": csrfToken,
             "Content-Type": "application/json"
           },
-          credentials: "include"
+          credentials: "include",
         });
 
         if (response.status === 401) {
@@ -103,7 +101,7 @@ export default function MusicPage() {
         }
 
         const userData = await response.json();
-        setUserEmail(userData.email || userData.name);
+        setUserName(userData.name || userData.email);
         setLoading(false);
       } catch (error) {
         console.error("Fetch error:", error);
@@ -119,14 +117,36 @@ export default function MusicPage() {
     fetchUserData();
   }, [authenticated, router]);
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    setAuthenticated(false);
+  const handleLogout = async () => {
+
+    try{
+      const csrfToken = await getCSTFToken();
+      const logoutRespones = await fetch(`${baseUrl}/api/user/logout`, {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${localStorage.getItem("token")}`,
+          "X-CSRF-TOKEN": csrfToken,
+          "Content-Type": "application/json"
+        }
+      })
+      if(!logoutRespones.ok){
+        throw new Error("Failed to logout");
+      }
+      localStorage.removeItem("token");
+      setAuthenticated(false);
     router.push("/login");
     toast({
       title: "Logged out",
       description: "You have been successfully logged out",
     });
+    } catch (error) {
+      console.error("Logout error:", error);
+      toast({
+        title: "Logout Error",
+        description: "An error occurred while logging out. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   return (
@@ -137,7 +157,7 @@ export default function MusicPage() {
           {loading ? (
             <span className="text-sm text-muted-foreground">Loading...</span>
           ) : (
-            <span className="text-sm text-muted-foreground">{userEmail}</span>
+            <span className="text-sm text-muted-foreground">{userName}</span>
           )}
           <Button variant="ghost" size="icon">
             <User className="h-5 w-5" />

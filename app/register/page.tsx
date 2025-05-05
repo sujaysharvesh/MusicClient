@@ -11,6 +11,10 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Separator } from "@/components/ui/separator"
 import { Loader2 } from "lucide-react"
 
+import * as dotenv from 'dotenv';
+import { toast } from "sonner"
+dotenv.config();
+
 export default function RegisterPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
@@ -24,6 +28,7 @@ export default function RegisterPage() {
   })
   const [error, setError] = useState<string | null>(null)
 
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     setFormData((prev) => ({
@@ -58,7 +63,7 @@ export default function RegisterPage() {
       }
 
       // Get CSRF token
-      const csrfResponse = await fetch("http://localhost:8081/api/user/csrf", {
+      const csrfResponse = await fetch(`${baseUrl}/api/user/csrf`, {
         credentials: "include",
       })
 
@@ -69,11 +74,11 @@ export default function RegisterPage() {
       const { token } = await csrfResponse.json()
 
       // Send registration request
-      const res = await fetch("http://localhost:8081/api/user/register", {
+      const res = await fetch(`${baseUrl}/api/user/register`  , {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-XSRF-TOKEN": token,
+          "X-CSRF-TOKEN": token,
         },
         body: JSON.stringify({
           username: formData.username,
@@ -85,7 +90,11 @@ export default function RegisterPage() {
       })
       const responseData = await res.json();
       if (!res.ok) {
-        throw new Error(responseData.message || "Registration failed");
+        toast.error(data.message || "Invalid credentials")
+      } else if (res.status === 409) {
+        toast.error("Email already exists")
+      } else if (res.status === 422) {
+        toast.error("Invalid email or password")
       }
   
       router.push("/login?fromRegistration=true");
