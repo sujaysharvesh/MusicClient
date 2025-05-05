@@ -10,7 +10,7 @@ export default function Home() {
           <div className="bg-primary text-primary-foreground p-4 rounded-full">
             <Music size={40} />
           </div>
-          <h1 className="text-3xl font-bold">Music Player</h1>
+          <h1 className="text-3xl font-bold">Vibe Stream</h1>
         </div>
 
         <div className="space-y-4">
@@ -35,10 +35,6 @@ export default function Home() {
           </p>
         </div>
       </div>
-
-      <footer className="absolute bottom-4 text-center text-sm text-muted-foreground">
-        © 2023 Music Player. All rights reserved.
-      </footer>
     </div>
   )
 }

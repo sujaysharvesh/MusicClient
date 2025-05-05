@@ -7,8 +7,8 @@ import { Toaster } from "sonner";
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Simple Music Player",
-  description: "A simple music player interface",
+  title: "Vibe Stream Music Player",
+  description: "All your Songs in one place",
     generator: 'v0.dev'
 }
 
